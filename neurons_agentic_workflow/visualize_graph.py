@@ -1,12 +1,17 @@
 """
-Run with:
-    poetry run python neurons_agentic_workflow/visualize_graph.py
-Saves graph.png in the project root.
+Plot graph and subgraphs visualization. 
 """
 
 from pathlib import Path
 from neurons_agentic_workflow.creative_editor.service import _graph
+from neurons_agentic_workflow.creative_editor.service.nodes import _worker_subgraph
 
-output = Path(__file__).parent.parent / "graph.png"
+root = Path(__file__).parent.parent
+
+output = root / "graph.png"
 output.write_bytes(_graph.get_graph().draw_mermaid_png())
-print(f"Graph saved to {output}")
+print(f"Outer graph saved to {output}")
+
+worker_output = root / "worker_subgraph.png"
+worker_output.write_bytes(_worker_subgraph.get_graph().draw_mermaid_png())
+print(f"Worker subgraph saved to {worker_output}")

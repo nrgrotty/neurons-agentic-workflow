@@ -9,7 +9,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s | %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-# Suppress noisy langchain/httpx debug output unless explicitly requested
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("langchain").setLevel(logging.WARNING)
 

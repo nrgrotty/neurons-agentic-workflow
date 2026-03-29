@@ -9,10 +9,24 @@
         "aspect_ratio": "Maintain original aspect ratio (1572x1720)",
         "brand_elements": "Ensure logo remains visible and legible at all times"
     },
-    "recommendation": {
+    "recommendations": [
+      {
         "id": "rec_1",
         "title": "Strengthen Headline Impact",
         "description": "Add visual punch to the headline through enhanced color contrast, a soft gradient backdrop, or a geometric shape—without increasing its physical size. The moderate attention on the discount message suggests it needs more visual emphasis to register urgency and value immediately.",
         "type": "contrast_salience"
-    }
+      },
+      {
+        "id": "rec_2",
+        "title": "Amplify Product Visibility",
+        "description": "Enhance color saturation and contrast in the jacket's yellow, blue, and pink panels, or add subtle highlights to emphasize garment construction. Human-face bias currently draws attention away from the merchandise; strengthening product definition will communicate quality more effectively in the critical opening seconds.",
+        "type": "contrast_salience"
+      },
+      {
+        "id": "rec_3",
+        "title": "Unify Logo and Headline",
+        "description": "Cluster the brand logo and headline together as a secondary focal point in the upper-right or center-right area. This reduces visual fragmentation on the left, allowing the model to command primary focus while brand messaging reinforces identity without delaying product discovery.",
+        "type": "composition"
+      }
+    ]
 }

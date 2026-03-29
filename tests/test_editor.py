@@ -83,7 +83,7 @@ async def test_edit_creative_integration(tmp_path):
 
     editor_input = EditorInput(
         image=input_image,
-        sub_task=SubTask(description="Add a subtle blue tint to the background."),
+        subtask=SubTask(description="Add a subtle blue tint to the background."),
     )
 
     result = await edit_creative(editor_input)

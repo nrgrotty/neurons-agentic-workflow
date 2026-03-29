@@ -1,4 +1,6 @@
+import operator
 from enum import Enum
+from typing import Annotated
 
 from pydantic import BaseModel
 from pathlib import Path
@@ -26,7 +28,7 @@ class Recommendation(BaseModel):
 class CreativeEditorInput(BaseModel):
     image: Path
     brand_guidelines: BrandGuidelines
-    recommendation: Recommendation
+    recommendations: list[Recommendation]
 
 class PlannerInput(BaseModel):
     brand_guidelines: BrandGuidelines
@@ -35,9 +37,13 @@ class PlannerInput(BaseModel):
 class SubTask(BaseModel):
     description: str
 
+
+class PlannerOutput(BaseModel):
+    subtasks: list[SubTask]
+
 class EditorInput(BaseModel):
     image: Path
-    sub_task: SubTask
+    subtask: SubTask
 
 
 class EditorOutput(BaseModel):
@@ -54,12 +60,41 @@ class CriticOutput(BaseModel):
     feedback: str
 
 
-class GraphState(BaseModel):
+class EvaluationMetric(BaseModel):
+    name: str
+    description: str
+    weight: float  # 0.0–1.0, relative importance
+
+
+class EvaluationMetrics(BaseModel):
+    metrics: list[EvaluationMetric]
+
+
+class WorkerState(BaseModel):
+    """State for a single parallel editor→critic→refiner loop."""
     image: Path
     recommendation: Recommendation
     brand_guidelines: BrandGuidelines
-    sub_task: SubTask | None = None
+    subtask: SubTask
+    subtask_index: int = 0
     edited_image: Path | None = None
     approved: bool | None = None
     critic_feedback: str | None = None
     iteration: int = 0
+
+
+class GraphState(BaseModel):
+    image: Path
+    recommendation: Recommendation
+    brand_guidelines: BrandGuidelines
+    subtasks: list[SubTask] = []
+    evaluation_metrics: EvaluationMetrics | None = None
+    edited_images: Annotated[list[Path], operator.add] = []
+    final_image: Path | None = None
+
+
+class PipelineState(BaseModel):
+    image: Path
+    brand_guidelines: BrandGuidelines
+    recommendations: list[Recommendation]
+    final_images: Annotated[list[Path], operator.add] = []
