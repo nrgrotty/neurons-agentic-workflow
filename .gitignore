@@ -73,3 +73,7 @@ MANIFEST
 # pyproject / pip
 pip-log.txt
 pip-delete-this-directory.txt
+
+
+**/*_edited.*
+graph.png

@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 
 from google import genai
@@ -7,12 +8,15 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
 from neurons_agentic_workflow.creative_editor.models import (
+    CriticOutput,
     GraphState,
     SubTask,
 )
 
 
 _planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(SubTask)
+_critic_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(CriticOutput)
+_refiner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(SubTask)
 
 
 async def planner_node(state: GraphState) -> dict:
@@ -68,4 +72,55 @@ async def editor_node(state: GraphState) -> dict:
         f"Response content: {response.candidates[0].content}"
     )
 
+
+async def critic_node(state: GraphState) -> dict:
+    """Evaluate the edited image against the recommendation and brand guidelines."""
+    image_b64 = base64.b64encode(Path(state.edited_image).read_bytes()).decode()
+    messages = [
+        SystemMessage(content=(
+            "You are a creative quality critic. Evaluate whether the edited image "
+            "correctly applies the recommendation while strictly respecting the brand guidelines. "
+            "Be specific about what works and what does not.\n\n"
+            f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
+            f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}\n\n"
+            f"Editing instruction that was applied: {state.sub_task.description}"
+        )),
+        HumanMessage(content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+            },
+            {
+                "type": "text",
+                "text": (
+                    "Does this edited image correctly apply the recommendation "
+                    "while respecting the brand guidelines? "
+                    "Set approval to true only if both conditions are fully met."
+                ),
+            },
+        ]),
+    ]
+    result: CriticOutput = await _critic_llm.ainvoke(messages)
+    return {"approved": result.approval, "critic_feedback": result.feedback}
+
+
+async def refiner_node(state: GraphState) -> dict:
+    """Produce a refined editing instruction based on critic feedback."""
+    messages = [
+        SystemMessage(content=(
+            "You are a creative image editing optimizer. "
+            "Given the original editing instruction and critic feedback, "
+            "produce a refined instruction that addresses the issues raised "
+            "while strictly respecting the brand guidelines.\n\n"
+            f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
+            f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}"
+        )),
+        HumanMessage(content=(
+            f"Original instruction: {state.sub_task.description}\n\n"
+            f"Critic feedback: {state.critic_feedback}\n\n"
+            "Produce a refined editing instruction that addresses the feedback."
+        )),
+    ]
+    refined: SubTask = await _refiner_llm.ainvoke(messages)
+    return {"sub_task": refined, "iteration": state.iteration + 1}
 

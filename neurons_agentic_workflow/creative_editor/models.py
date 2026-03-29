@@ -51,7 +51,7 @@ class CriticInput(BaseModel):
 
 class CriticOutput(BaseModel):
     approval: bool
-    sub_task: SubTask
+    feedback: str
 
 
 class GraphState(BaseModel):
@@ -60,3 +60,6 @@ class GraphState(BaseModel):
     brand_guidelines: BrandGuidelines
     sub_task: SubTask | None = None
     edited_image: Path | None = None
+    approved: bool | None = None
+    critic_feedback: str | None = None
+    iteration: int = 0

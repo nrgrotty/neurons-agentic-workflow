@@ -1,4 +1,6 @@
 
+from typing_extensions import Literal
+
 from langsmith import traceable
 from langgraph.graph import StateGraph, END
 
@@ -10,15 +12,34 @@ from neurons_agentic_workflow.creative_editor.models import (
     PlannerInput,
     SubTask,
 )
-from neurons_agentic_workflow.creative_editor.service.nodes import editor_node, planner_node
+from neurons_agentic_workflow.creative_editor.service.nodes import (
+    critic_node,
+    editor_node,
+    planner_node,
+    refiner_node,
+)
+
+MAX_ITERATIONS = 3
+
+ApprovalResponse = Literal["Accepted", "Rejected"]
+def _should_continue(state: GraphState) -> ApprovalResponse:
+    """Evaluator/Optimizer routing: approved or max retries reached → END, else refine."""
+    if state.approved or state.iteration >= MAX_ITERATIONS:
+        return "Accepted"
+    return "Rejected"
+
 
 def _build_graph():
     graph = StateGraph(GraphState)
     graph.add_node("planner", planner_node)
     graph.add_node("editor", editor_node)
+    graph.add_node("critic", critic_node)
+    graph.add_node("refiner", refiner_node)
     graph.set_entry_point("planner")
     graph.add_edge("planner", "editor")
-    graph.add_edge("editor", END)
+    graph.add_edge("editor", "critic")
+    graph.add_conditional_edges("critic", _should_continue, {"Accepted": END, "Rejected": "refiner"})
+    graph.add_edge("refiner", "editor")
     return graph.compile()
 
 
@@ -47,7 +68,7 @@ async def edit_creative(editor_input: EditorInput) -> EditorOutput:
 
 @traceable(name="apply-recommendation")
 async def apply_recommendation(input: CreativeEditorInput) -> EditorOutput:
-    """Full pipeline via LangGraph: planner → editor."""
+    """Full pipeline via LangGraph: planner → editor → critic → [refiner → editor]* → END."""
     initial_state = GraphState(
         image=input.image,
         recommendation=input.recommendation,
