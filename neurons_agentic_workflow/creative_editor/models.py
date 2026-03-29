@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import TypedDict
 
 from pydantic import BaseModel
 from pathlib import Path
@@ -55,9 +54,9 @@ class CriticOutput(BaseModel):
     sub_task: SubTask
 
 
-class GraphState(TypedDict):
+class GraphState(BaseModel):
     image: Path
     recommendation: Recommendation
     brand_guidelines: BrandGuidelines
-    sub_task: SubTask | None
-    edited_image: Path | None
+    sub_task: SubTask | None = None
+    edited_image: Path | None = None
