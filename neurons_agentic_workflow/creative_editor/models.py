@@ -23,19 +23,24 @@ class Recommendation(BaseModel):
     description: str
     type: RecommendationType
 
-
-class CreativeFeedback(BaseModel):
-    filename: str
+class PlannerInput(BaseModel):
+    image: str
     brand_guidelines: BrandGuidelines
-    recommendations: list[Recommendation]
-
-
-class Tool(str, Enum):
-    PATCH = "patch"
-    STYLE = "style"
-    WRITE = "write"
-
+    recommendation: Recommendation
 
 class SubTask(BaseModel):
-    tool: Tool
-    summary: str
+    image:str 
+    description: str
+
+class EditorInput(BaseModel):
+    image: str
+    sub_task: SubTask
+
+class CriticInput(BaseModel):
+    edited_image: str
+    recommendation: Recommendation
+    brand_guidelines: BrandGuidelines
+
+class CriticOutput(BaseModel):
+    approval: bool
+    sub_task: SubTask
