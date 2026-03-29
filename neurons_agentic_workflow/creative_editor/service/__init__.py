@@ -5,28 +5,15 @@ from neurons_agentic_workflow.creative_editor.models import (
     CreativeEditorInput,
     EditorInput,
     EditorOutput,
-    GraphState,
     PipelineState,
-    PlannerInput,
     EditorWorkerState,
 )
 from neurons_agentic_workflow.creative_editor.service.pipeline import pipeline
 from neurons_agentic_workflow.creative_editor.service.nodes import (
-    planner_node,
     worker_node,
 )
 
 
-
-async def plan_creative_editions(planner_input: PlannerInput) -> list:
-    """Run the planner and return the list of subtasks."""
-    state = GraphState(
-        image=None,
-        recommendation=planner_input.recommendation,
-        brand_guidelines=planner_input.brand_guidelines,
-    )
-    result = await planner_node(state)
-    return result["sub_tasks"]
 
 
 async def edit_creative(editor_input: EditorInput) -> EditorOutput:
