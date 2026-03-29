@@ -1,4 +1,5 @@
 
+from langsmith import traceable
 from langgraph.graph import StateGraph, END
 
 from neurons_agentic_workflow.creative_editor.models import (
@@ -44,6 +45,7 @@ async def edit_creative(editor_input: EditorInput) -> EditorOutput:
     return EditorOutput(edited_image=result["edited_image"])
 
 
+@traceable(name="apply-recommendation")
 async def apply_recommendation(input: CreativeEditorInput) -> EditorOutput:
     """Full pipeline via LangGraph: planner → editor."""
     initial_state = GraphState(

@@ -3,11 +3,15 @@ from fastapi import FastAPI
 from neurons_agentic_workflow.creative_editor.controller import router
 from pathlib import Path
 
+# stdlib logging kept for uvicorn/fastapi infrastructure messages
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-8s %(name)s | %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
+# Suppress noisy langchain/httpx debug output unless explicitly requested
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("langchain").setLevel(logging.WARNING)
 
 app = FastAPI(title="Neurons Creative Editor")
 app.include_router(router)

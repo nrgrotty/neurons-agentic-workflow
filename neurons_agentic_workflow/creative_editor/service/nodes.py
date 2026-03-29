@@ -4,6 +4,7 @@ from google import genai
 from google.genai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from langsmith import traceable
 
 from neurons_agentic_workflow.creative_editor.models import (
     GraphState,
@@ -31,6 +32,7 @@ async def planner_node(state: GraphState) -> dict:
     return {"sub_task": sub_task}
 
 
+@traceable(name="editor-node", run_type="llm")
 async def editor_node(state: GraphState) -> dict:
     """Apply the sub_task editing instruction to the image."""
     prompt_text = (
@@ -65,7 +67,5 @@ async def editor_node(state: GraphState) -> dict:
         f"Editor model did not return an image in its response. "
         f"Response content: {response.candidates[0].content}"
     )
-
-
 
 
