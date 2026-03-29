@@ -1,7 +1,7 @@
 from enum import Enum
 
 from pydantic import BaseModel
-
+from pathlib import Path
 
 class BrandGuidelines(BaseModel):
     protected_regions: list[str]
@@ -23,21 +23,29 @@ class Recommendation(BaseModel):
     description: str
     type: RecommendationType
 
+class CreativeEditorInput(BaseModel):
+    image: Path
+    brand_guidelines: BrandGuidelines
+    recommendation: Recommendation
+
 class PlannerInput(BaseModel):
-    image: str
     brand_guidelines: BrandGuidelines
     recommendation: Recommendation
 
 class SubTask(BaseModel):
-    image:str 
     description: str
 
 class EditorInput(BaseModel):
-    image: str
+    image: Path
     sub_task: SubTask
 
+
+class EditorOutput(BaseModel):
+    edited_image: Path
+
+
 class CriticInput(BaseModel):
-    edited_image: str
+    edited_image: Path
     recommendation: Recommendation
     brand_guidelines: BrandGuidelines
 

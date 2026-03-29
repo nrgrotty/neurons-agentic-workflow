@@ -1,0 +1,18 @@
+{
+    "image": "/home/neus/Documents/git/neurons-agentic-workflow/input/creative_1.png",
+    "brand_guidelines": {
+        "protected_regions": [
+            "Do not modify or remove the brand logo",
+            "Do not alter the model's face"
+        ],
+        "typography": "Maintain existing font style and hierarchy for all text elements",
+        "aspect_ratio": "Maintain original aspect ratio (1572x1720)",
+        "brand_elements": "Ensure logo remains visible and legible at all times"
+    },
+    "recommendation": {
+        "id": "rec_1",
+        "title": "Strengthen Headline Impact",
+        "description": "Add visual punch to the headline through enhanced color contrast, a soft gradient backdrop, or a geometric shape—without increasing its physical size. The moderate attention on the discount message suggests it needs more visual emphasis to register urgency and value immediately.",
+        "type": "contrast_salience"
+    }
+}
