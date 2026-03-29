@@ -75,5 +75,5 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 
-**/creative_*
+output/creative_*
 *graph.png

@@ -16,22 +16,23 @@ from neurons_agentic_workflow.creative_editor.models import (
     GraphState,
     PlannerOutput,
     SubTask,
-    WorkerState,
+    EditorWorkerState,
 )
 
+OUTPUT_FOLDER = Path(__file__).parent.parent.parent.parent / "output"
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
 MAX_ITERATIONS = 3
+
+class _BestImage(BaseModel):
+    index: int  # 0-based index into the candidates list
 
 _planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(PlannerOutput)
 _metrics_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluationMetrics)
 _critic_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(CriticOutput)
 _refiner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(SubTask)
-
-
-class _BestImage(BaseModel):
-    index: int  # 0-based index into the candidates list
-
-
 _synthesizer_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(_BestImage)
+
 
 
 async def planner_node(state: GraphState) -> dict:
@@ -50,7 +51,7 @@ async def planner_node(state: GraphState) -> dict:
         HumanMessage(content="Decompose the recommendation into editing subtasks."),
     ]
     result: PlannerOutput = await _planner_llm.ainvoke(messages)
-    return {"sub_tasks": result.subtasks}
+    return {"subtasks": result.subtasks}
 
 
 async def metrics_node(state: GraphState) -> dict:
@@ -102,7 +103,7 @@ async def synthesizer_node(state: GraphState) -> dict:
 
 
 @traceable(name="editor-node", run_type="llm")
-async def _editor(state: WorkerState) -> dict:
+async def _editor(state: EditorWorkerState) -> dict:
     """Apply the subtask instruction to the image."""
     prompt_text = (
         "Edit this image following these instructions precisely:\n"
@@ -125,9 +126,7 @@ async def _editor(state: WorkerState) -> dict:
         config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
     )
 
-    output_path = Path(state.image).with_stem(
-        f"{Path(state.image).stem}_{state.recommendation.id}_subtask{state.subtask_index}"
-    )
+    output_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_subtask{state.subtask_index}.png"
     for part in response.candidates[0].content.parts:
         if part.inline_data is not None:
             output_path.write_bytes(part.inline_data.data)
@@ -139,7 +138,7 @@ async def _editor(state: WorkerState) -> dict:
     )
 
 
-async def _critic(state: WorkerState) -> dict:
+async def _critic(state: EditorWorkerState) -> dict:
     """Evaluate the edited image against the recommendation and brand guidelines."""
     image_b64 = base64.b64encode(Path(state.edited_image).read_bytes()).decode()
     messages = [
@@ -163,7 +162,7 @@ async def _critic(state: WorkerState) -> dict:
     return {"approved": result.approval, "critic_feedback": result.feedback}
 
 
-async def _refiner(state: WorkerState) -> dict:
+async def _refiner(state: EditorWorkerState) -> dict:
     """Produce a refined editing instruction based on critic feedback."""
     messages = [
         SystemMessage(content=(
@@ -190,7 +189,7 @@ async def worker_node(state: dict) -> dict:
     return {"edited_images": [edited_image]}
 
 
-def _should_continue(state: WorkerState) -> Literal["Accepted", "Rejected"]:
+def _should_continue(state: EditorWorkerState) -> Literal["Accepted", "Rejected"]:
     """Evaluator/Optimizer routing: approved or max iterations reached → END, else refine."""
     if state.approved or state.iteration >= MAX_ITERATIONS:
         return "Accepted"
@@ -198,7 +197,7 @@ def _should_continue(state: WorkerState) -> Literal["Accepted", "Rejected"]:
 
 
 def _build_worker_subgraph():
-    graph = StateGraph(WorkerState)
+    graph = StateGraph(EditorWorkerState)
     graph.add_node("editor", _editor)
     graph.add_node("critic", _critic)
     graph.add_node("refiner", _refiner)

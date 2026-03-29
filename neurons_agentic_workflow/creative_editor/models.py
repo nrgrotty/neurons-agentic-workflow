@@ -63,14 +63,14 @@ class CriticOutput(BaseModel):
 class EvaluationMetric(BaseModel):
     name: str
     description: str
-    weight: float  # 0.0–1.0, relative importance
+    weight: float
 
 
 class EvaluationMetrics(BaseModel):
     metrics: list[EvaluationMetric]
 
 
-class WorkerState(BaseModel):
+class EditorWorkerState(BaseModel):
     """State for a single parallel editor→critic→refiner loop."""
     image: Path
     recommendation: Recommendation
