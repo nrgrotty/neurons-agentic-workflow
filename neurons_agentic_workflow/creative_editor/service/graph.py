@@ -3,8 +3,9 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
 from neurons_agentic_workflow.creative_editor.models import (
-    GraphState,
     EditorWorkerState,
+    GraphState,
+    SubTask,
 )
 from neurons_agentic_workflow.creative_editor.service.nodes import (
     metrics_node,
@@ -20,8 +21,7 @@ def _orchestrate(state: GraphState) -> list[Send]:
             image=state.image,
             recommendation=state.recommendation,
             brand_guidelines=state.brand_guidelines,
-            subtask=sub_task,
-            subtask_index=i,
+            subtask=SubTask(description=sub_task.description, index=i),
         ).model_dump())
         for i, sub_task in enumerate(state.subtasks)
     ]

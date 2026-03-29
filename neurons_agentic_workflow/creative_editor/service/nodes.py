@@ -126,7 +126,7 @@ async def _editor(state: EditorWorkerState) -> dict:
         config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
     )
 
-    output_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_subtask{state.subtask_index}.png"
+    output_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_subtask{state.subtask.index}.png"
     for part in response.candidates[0].content.parts:
         if part.inline_data is not None:
             output_path.write_bytes(part.inline_data.data)
