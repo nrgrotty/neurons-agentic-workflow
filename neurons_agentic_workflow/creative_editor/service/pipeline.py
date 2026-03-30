@@ -10,13 +10,9 @@ from neurons_agentic_workflow.creative_editor.service.graph import main_graph
 
 async def _recommendation_branch(state: GraphState) -> dict:
     """Run the full per-recommendation graph and return its final_image for fan-in."""
-    final = await main_graph.ainvoke(state)
-    if isinstance(final, dict):
-        final_image = final["final_image"]
-        branch_audit = final.get("audit_trail", [])
-    else:
-        final_image = final.final_image
-        branch_audit = final.audit_trail
+    response = await main_graph.ainvoke(state)
+    final_image = response["final_image"]
+    branch_audit = response.get("audit_trail", [])
     return {"final_images": [final_image], "audit_trail": branch_audit}
 
 
