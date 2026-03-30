@@ -30,6 +30,52 @@ st.set_page_config(
 st.title("🎨 Neurons Creative Editor")
 st.caption("Apply AI-powered recommendations to your creative assets.")
 
+# ── Custom CSS: make the file-uploader look like a drag-and-drop zone ─────────
+st.markdown(
+    """
+    <style>
+    /* Drop zone container */
+    [data-testid="stFileUploaderDropzone"] {
+        border: 2.5px dashed #4A90D9 !important;
+        border-radius: 16px !important;
+        background: #f0f6ff !important;
+        padding: 2.5rem 1.5rem !important;
+        text-align: center !important;
+        transition: background 0.2s ease, border-color 0.2s ease !important;
+        cursor: pointer !important;
+    }
+    [data-testid="stFileUploaderDropzone"]:hover {
+        background: #dceeff !important;
+        border-color: #1a6bbf !important;
+    }
+    /* Hide the default generic upload icon provided by Streamlit */
+    [data-testid="stFileUploaderDropzoneInstructions"] svg {
+        display: none !important;
+    }
+    /* Replace it with a larger emoji-based icon via a pseudo-element */
+    [data-testid="stFileUploaderDropzoneInstructions"]::before {
+        content: "☁️";
+        display: block;
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+    }
+    /* Primary label text */
+    [data-testid="stFileUploaderDropzoneInstructions"] > div:first-child {
+        font-size: 1.15rem !important;
+        font-weight: 600 !important;
+        color: #1a6bbf !important;
+    }
+    /* "Browse files" button */
+    [data-testid="stFileUploaderDropzone"] button {
+        margin-top: 0.75rem !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ── Session state initialisation ─────────────────────────────────────────────
 if "protected_regions" not in st.session_state:
     st.session_state.protected_regions = [""]
@@ -64,9 +110,9 @@ with st.sidebar:
 # ── 1. Image upload ───────────────────────────────────────────────────────────
 st.header("1. Upload Creative Image")
 uploaded_file = st.file_uploader(
-    "Select the image to edit",
+    "Drag & drop your image here, or click to browse",
     type=["png", "jpg", "jpeg", "webp"],
-    help="Supported formats: PNG, JPG, JPEG, WEBP",
+    label_visibility="visible",
 )
 if uploaded_file:
     st.image(uploaded_file, caption="Original image", use_container_width=True)
