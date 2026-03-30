@@ -1,4 +1,5 @@
 import base64
+import errno
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,33 @@ OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
 MAX_ITERATIONS = 3
 
+_SUFFIX_TO_MIME: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+
+class InvalidImageTypeError(ValueError):
+    """Raised when an image file has an unsupported or unrecognised MIME type."""
+
+
+class MaxRetriesExceededError(RuntimeError):
+    """Raised when the editor–critic loop exhausts all iterations without critic approval."""
+
+def _validate_image_file(path: Path) -> str:
+    """Validate that *path* exists and has a supported image type. Returns the MIME type."""
+    if not path.exists():
+        raise FileNotFoundError(errno.ENOENT, "Image file not found", str(path))
+    suffix = path.suffix.lower()
+    mime_type = _SUFFIX_TO_MIME.get(suffix)
+    if mime_type is None:
+        supported = ", ".join(sorted(_SUFFIX_TO_MIME))
+        raise InvalidImageTypeError(
+            f"Unsupported image type '{suffix}' for file '{path.name}'. "
+            f"Supported extensions: {supported}."
+        )
+    return mime_type
+
 class _BestImage(BaseModel):
     index: int  # 0-based index into the candidates list
     reasoning: str
@@ -39,7 +67,7 @@ _synthesizer_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structu
 
 
 
-async def planner_node(state: GraphState) -> dict:
+async def editor_planner_node(state: GraphState) -> dict:
     """Decompose the recommendation into one or more independent editing subtasks."""
     messages = [
         SystemMessage(content=(
@@ -65,7 +93,7 @@ async def planner_node(state: GraphState) -> dict:
     return {"subtasks": result.subtasks, "audit_trail": [entry]}
 
 
-async def metrics_node(state: GraphState) -> dict:
+async def evaluation_planner_node(state: GraphState) -> dict:
     """Interpret the recommendation to derive named evaluation metrics for the synthesizer."""
     messages = [
         SystemMessage(content=(
@@ -94,10 +122,13 @@ def _write_audit_trail(state: GraphState, synthesizer_entry: list[AuditEntry]) -
     """Persist the full audit trail for a recommendation to a JSON file in the output folder."""
     all_entries = state.audit_trail + synthesizer_entry
     audit_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_audit.json"
-    audit_path.write_text(
-        json.dumps([e.model_dump(mode="json") for e in all_entries], indent=2),
-        encoding="utf-8",
-    )
+    try:
+        audit_path.write_text(
+            json.dumps([e.model_dump(mode="json") for e in all_entries], indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Failed to write audit trail to '{audit_path}': {exc}") from exc
 
 
 async def synthesizer_node(state: GraphState) -> dict:
@@ -120,7 +151,8 @@ async def synthesizer_node(state: GraphState) -> dict:
 
     content: list = []
     for i, img_path in enumerate(state.edited_images):
-        img_b64 = base64.b64encode(Path(img_path).read_bytes()).decode()
+        _validate_image_file(img_path)
+        img_b64 = base64.b64encode(img_path.read_bytes()).decode()
         content.append({"type": "text", "text": f"Candidate {i} (subtask: {state.subtasks[i].description}):"})
         content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}})
     content.append({
@@ -150,11 +182,9 @@ async def _editor(state: EditorWorkerState) -> dict:
         "Edit this image following these instructions precisely:\n"
         f"{state.subtask.description}"
     )
-    # gemini-2.5-flash-image is not yet available via langchain-google-genai
-    gemini_client = genai.Client()
-    image_bytes = Path(state.image).read_bytes()
+    mime_type = _validate_image_file(state.image)
     client = wrappers.wrap_gemini(
-        gemini_client,
+        genai.Client(),
         tracing_extra={
             "tags": ["gemini", "python"],
             "metadata": {
@@ -167,7 +197,7 @@ async def _editor(state: EditorWorkerState) -> dict:
         contents=[
             types.Content(
                 parts=[
-                    types.Part(inline_data=types.Blob(mime_type="image/png", data=image_bytes)),
+                    types.Part(inline_data=types.Blob(mime_type=mime_type, data=state.image.read_bytes())),
                     types.Part(text=prompt_text),
                 ]
             )
@@ -175,8 +205,13 @@ async def _editor(state: EditorWorkerState) -> dict:
         config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
     )
 
+    if not response.candidates:
+        raise ValueError(
+            f"Editor model returned no candidates for subtask '{state.subtask.description}'."
+        )
+    candidate = response.candidates[0]
     output_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_subtask{state.subtask.index}.png"
-    for part in response.candidates[0].content.parts:
+    for part in candidate.content.parts:
         if part.inline_data is not None:
             output_path.write_bytes(part.inline_data.data)
             entry = AuditEntry(
@@ -190,14 +225,15 @@ async def _editor(state: EditorWorkerState) -> dict:
             return {"edited_image": output_path, "audit_trail": [entry]}
 
     raise ValueError(
-        f"Editor model did not return an image. "
-        f"Response content: {response.candidates[0].content}"
+        f"Editor model did not return an image for subtask '{state.subtask.description}'. "
+        f"Response content: {candidate.content}"
     )
 
 
 async def _critic(state: EditorWorkerState) -> dict:
     """Evaluate the edited image against the recommendation and brand guidelines."""
-    image_b64 = base64.b64encode(Path(state.edited_image).read_bytes()).decode()
+    _validate_image_file(state.edited_image)
+    image_b64 = base64.b64encode(state.edited_image.read_bytes()).decode()
     messages = [
         SystemMessage(content=(
             "You are a creative quality critic. Evaluate whether the edited image "
