@@ -10,12 +10,13 @@ from neurons_agentic_workflow.creative_editor.models import (
 )
 from neurons_agentic_workflow.creative_editor.service.pipeline import pipeline
 from neurons_agentic_workflow.creative_editor.service.nodes import (
-    worker_node,
+    editor_worker_node,
 )
 
 
 
 
+@traceable(run_type="chain", name="edit_creative")
 async def edit_creative(editor_input: EditorInput) -> EditorOutput:
     """Run a single editor→critic→refiner loop and return the edited image."""
     state = EditorWorkerState(
@@ -24,12 +25,13 @@ async def edit_creative(editor_input: EditorInput) -> EditorOutput:
         brand_guidelines=None,
         subtask=editor_input.subtask,
     )
-    result = await worker_node(state.model_dump())
+    result = await editor_worker_node(state.model_dump())
     return EditorOutput(edited_image=result["edited_images"][0])
 
 
+@traceable(run_type="chain", name="run_pipeline")
 async def run_pipeline(input: CreativeEditorInput) -> list[EditorOutput]:
-    """Full pipeline: parallel recommendation branches → each runs planner+workers+synthesizer."""
+    """Full pipeline: parallel recommendation branches → each runs planner+editor_workers+synthesizer."""
     initial_state = PipelineState(
         image=input.image,
         brand_guidelines=input.brand_guidelines,

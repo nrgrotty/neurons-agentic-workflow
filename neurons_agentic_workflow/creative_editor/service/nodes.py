@@ -189,9 +189,9 @@ async def _refiner(state: EditorWorkerState) -> dict:
     return {"sub_task": refined, "iteration": state.iteration + 1}
 
 
-async def worker_node(state: dict) -> dict:
-    """Run the worker subgraph for one subtask. Returns edited_images for fan-in."""
-    final = await _worker_subgraph.ainvoke(state)
+async def editor_worker_node(state: dict) -> dict:
+    """Run the editor_worker subgraph for one subtask. Returns edited_images for fan-in."""
+    final = await _editor_worker_subgraph.ainvoke(state)
     edited_image = final["edited_image"] if isinstance(final, dict) else final.edited_image
     return {"edited_images": [edited_image]}
 
@@ -203,7 +203,7 @@ def _should_continue(state: EditorWorkerState) -> Literal["Accepted", "Rejected"
     return "Rejected"
 
 
-def _build_worker_subgraph():
+def _build_editor_worker_subgraph():
     graph = StateGraph(EditorWorkerState)
     graph.add_node("editor", _editor)
     graph.add_node("critic", _critic)
@@ -217,5 +217,5 @@ def _build_worker_subgraph():
     return graph.compile()
 
 
-_worker_subgraph = _build_worker_subgraph()
+_editor_worker_subgraph = _build_editor_worker_subgraph()
 
