@@ -28,13 +28,15 @@ router = APIRouter(prefix="/creative-editor", tags=["creative-editor"])
 
 
 def _parse_recommendations(
-    recommendations: str = Form(
-        ...,
-        description='JSON array of recommendations: [{"id": "rec_1", "title": "...", "description": "...", "type": "colour_mood|copy_messaging|contrast_salience|composition"}]',
-    ),
+    recommendations: Annotated[
+        list[str],
+        Form(
+            description='Repeat this field for each recommendation. Each value is a JSON object: {"id": "rec_1", "title": "...", "description": "...", "type": "colour_mood|copy_messaging|contrast_salience|composition"}',
+        ),
+    ],
 ) -> list[Recommendation]:
     try:
-        return [Recommendation.model_validate(r) for r in json.loads(recommendations)]
+        return [Recommendation.model_validate(json.loads(r)) for r in recommendations]
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=422,
@@ -64,10 +66,8 @@ def _build_zip(output: PipelineOutput) -> io.BytesIO:
     buf.seek(0)
     return buf
 
-
-@router.post("/apply-recommendations")
 @traceable(run_type="chain", name="apply_recommendations")
-async def apply_recommendations(
+async def _apply_recommendations(
     image: UploadFile,
     protected_regions: Annotated[list[str], Form(description="Regions that must not be modified (repeat field for multiple values)")],
     typography: Annotated[str, Form(description="Typography rules to maintain")],
@@ -75,7 +75,7 @@ async def apply_recommendations(
     brand_elements: Annotated[str, Form(description="Brand elements that must remain visible")],
     recommendations: Annotated[list[Recommendation], Depends(_parse_recommendations)],
 ) -> StreamingResponse:
-    """Full pipeline: returns a ZIP containing one edited image per recommendation plus the audit trail."""
+    """Core logic of the apply-recommendations endpoint, without FastAPI-specific response handling."""
     image_path = await _save_uploaded_image(image)
     try:
         creative_editor_input = PipelineInput(
@@ -138,4 +138,21 @@ async def apply_recommendations(
     finally:
         image_path.unlink(missing_ok=True)
 
-
+@router.post("/apply-recommendations")
+async def apply_recommendations(
+    image: UploadFile,
+    protected_regions: Annotated[list[str], Form(description="Regions that must not be modified (repeat field for multiple values)")],
+    typography: Annotated[str, Form(description="Typography rules to maintain")],
+    aspect_ratio: Annotated[str, Form(description="Aspect ratio constraint, e.g. '1572x1720'")],
+    brand_elements: Annotated[str, Form(description="Brand elements that must remain visible")],
+    recommendations: Annotated[list[Recommendation], Depends(_parse_recommendations)],
+) -> StreamingResponse:
+    """Full pipeline: returns a ZIP containing one edited image per recommendation plus the audit trail."""
+    return await _apply_recommendations(
+        image=image,
+        protected_regions=protected_regions,
+        typography=typography,
+        aspect_ratio=aspect_ratio,
+        brand_elements=brand_elements,
+        recommendations=recommendations,
+    )
