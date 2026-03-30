@@ -14,9 +14,10 @@ from langsmith import traceable
 from pydantic import ValidationError
 
 from neurons_agentic_workflow.creative_editor.models import (
-    PipelineFormInput,
+    BrandGuidelines,
     PipelineInput,
     PipelineOutput,
+    Recommendation,
 )
 from neurons_agentic_workflow.creative_editor.service import (
     run_pipeline,
@@ -26,15 +27,18 @@ from neurons_agentic_workflow.creative_editor.service.nodes import InvalidImageT
 router = APIRouter(prefix="/creative-editor", tags=["creative-editor"])
 
 
-def _parse_pipeline_form_input(
-    pipeline_input: str = Form(..., description='JSON with "brand_guidelines" and "recommendations" fields'),
-) -> PipelineFormInput:
+def _parse_recommendations(
+    recommendations: str = Form(
+        ...,
+        description='JSON array of recommendations: [{"id": "rec_1", "title": "...", "description": "...", "type": "colour_mood|copy_messaging|contrast_salience|composition"}]',
+    ),
+) -> list[Recommendation]:
     try:
-        return PipelineFormInput.model_validate_json(pipeline_input)
-    except (ValidationError, ValueError) as exc:
+        return [Recommendation.model_validate(r) for r in json.loads(recommendations)]
+    except (ValidationError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=422,
-            detail=f"Invalid pipeline_input: {exc}\n\n{traceback.format_exc()}",
+            detail=f"Invalid recommendations: {exc}\n\n{traceback.format_exc()}",
         ) from exc
 
 
@@ -65,15 +69,24 @@ def _build_zip(output: PipelineOutput) -> io.BytesIO:
 @traceable(run_type="chain", name="apply_recommendations")
 async def apply_recommendations(
     image: UploadFile,
-    parsed_input: Annotated[PipelineFormInput, Depends(_parse_pipeline_form_input)],
+    protected_regions: Annotated[list[str], Form(description="Regions that must not be modified (repeat field for multiple values)")],
+    typography: Annotated[str, Form(description="Typography rules to maintain")],
+    aspect_ratio: Annotated[str, Form(description="Aspect ratio constraint, e.g. '1572x1720'")],
+    brand_elements: Annotated[str, Form(description="Brand elements that must remain visible")],
+    recommendations: Annotated[list[Recommendation], Depends(_parse_recommendations)],
 ) -> StreamingResponse:
     """Full pipeline: returns a ZIP containing one edited image per recommendation plus the audit trail."""
     image_path = await _save_uploaded_image(image)
     try:
         creative_editor_input = PipelineInput(
             image=image_path,
-            brand_guidelines=parsed_input.brand_guidelines,
-            recommendations=parsed_input.recommendations,
+            brand_guidelines=BrandGuidelines(
+                protected_regions=protected_regions,
+                typography=typography,
+                aspect_ratio=aspect_ratio,
+                brand_elements=brand_elements,
+            ),
+            recommendations=recommendations,
         )
         output = await run_pipeline(creative_editor_input)
         zip_buf = _build_zip(output)
