@@ -291,7 +291,7 @@ async def _refiner(state: EditorWorkerState) -> dict:
     return {"subtask": refined, "iteration": state.iteration + 1, "audit_trail": [entry]}
 
 
-async def editor_worker_node(state: dict) -> dict:
+async def editor_worker_node(state: GraphState) -> dict:
     """Run the editor_worker subgraph for one subtask. Returns edited_images for fan-in."""
     final = await _editor_worker_subgraph.ainvoke(state)
     edited_image = final["edited_image"]
