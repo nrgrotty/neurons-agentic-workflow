@@ -6,7 +6,7 @@ from pathlib import Path
 from neurons_agentic_workflow.service.graph import main_graph
 from neurons_agentic_workflow.service.nodes import _editor_worker_subgraph
 
-root = Path(__file__).parent.parent
+root = Path(__file__).parent
 
 output = root / "graph.png"
 output.write_bytes(main_graph.get_graph().draw_mermaid_png())

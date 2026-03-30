@@ -1,0 +1,35 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    volumes:
+      # Persists files written to the output folder inside the container.
+      # See neurons_agentic_workflow/service/nodes.py — OUTPUT_FOLDER resolves
+      # to /output when WORKDIR is /app.
+      - output_data:/output
+    restart: unless-stopped
+
+  frontend:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      # Docker's internal DNS resolves "backend" to the backend container.
+      - API_BASE_URL=http://backend:8000
+    command: >
+      streamlit run frontend.py
+      --server.address 0.0.0.0
+      --server.port 8501
+      --server.headless true
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  output_data:

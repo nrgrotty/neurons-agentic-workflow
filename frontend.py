@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import threading
 import time
 import zipfile
@@ -10,7 +11,7 @@ import requests
 import streamlit as st
 from PIL import Image
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 APPLY_RECOMMENDATIONS_URL = f"{API_BASE_URL}/creative-editor/apply-recommendations"
 
 RECOMMENDATION_TYPES = [

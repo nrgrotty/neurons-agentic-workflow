@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: neurons-agentic-workflow
-    runtime: python
-    plan: free
-    autoDeploy: false
-    buildCommand: pip install poetry && poetry lock && poetry install --only main
-    startCommand: poetry run uvicorn main:app --host 0.0.0.0 --port $PORT
