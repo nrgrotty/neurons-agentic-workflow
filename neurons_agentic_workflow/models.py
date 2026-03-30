@@ -107,14 +107,21 @@ class GraphState(BaseModel):
     edited_images: Annotated[list[Path], operator.add] = []
     final_image: Path | None = None
     audit_trail: Annotated[list[AuditEntry], operator.add] = []
+
 class PipelineState(BaseModel):
     image: Path
     brand_guidelines: BrandGuidelines
     recommendations: list[Recommendation]
-    final_images: Annotated[list[Path], operator.add] = []
+    recommendation_results: Annotated[list["RecommendationResult"], operator.add] = []
     audit_trail: Annotated[list[AuditEntry], operator.add] = []
 
 
+class RecommendationResult(BaseModel):
+    recommendation_id: str
+    original_image: Path
+    best_variant: Path
+    other_variants: list[Path]
+
 class PipelineOutput(BaseModel):
-    final_images: list[EditorOutput]
+    recommendation_results: list[RecommendationResult]
     audit_trail: list[AuditEntry]

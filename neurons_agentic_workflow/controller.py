@@ -52,15 +52,32 @@ async def _save_uploaded_image(image: UploadFile) -> Path:
 def _build_zip(output: PipelineOutput) -> io.BytesIO:
     """Pack all edited images and the audit trail into an in-memory ZIP."""
     buf = io.BytesIO()
+    manifest: dict = {"recommendations": []}
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for i, editor_output in enumerate(output.final_images):
-            img_path = Path(editor_output.edited_image)
-            if img_path.exists():
-                zf.write(img_path, arcname=img_path.name)
+        for result in output.recommendation_results:
+            rec_id = result.recommendation_id
+            rec_entry: dict = {
+                "id": rec_id,
+                "best_variant": None,
+                "other_variants": [],
+            }
+            best_path = Path(result.best_variant)
+            if best_path.exists():
+                arcname = f"{rec_id}_best{best_path.suffix}"
+                zf.write(best_path, arcname=arcname)
+                rec_entry["best_variant"] = arcname
+            for i, variant_path in enumerate(result.other_variants):
+                vp = Path(variant_path)
+                if vp.exists():
+                    arcname = f"{rec_id}_variant_{i}{vp.suffix}"
+                    zf.write(vp, arcname=arcname)
+                    rec_entry["other_variants"].append(arcname)
+            manifest["recommendations"].append(rec_entry)
         audit_json = json.dumps(
             [e.model_dump(mode="json") for e in output.audit_trail], indent=2
         )
         zf.writestr("audit_trail.json", audit_json)
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
     buf.seek(0)
     return buf
 

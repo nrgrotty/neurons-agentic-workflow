@@ -352,17 +352,18 @@ if st.session_state.trigger_run:
             zip_bytes = io.BytesIO(response.content)
             with zipfile.ZipFile(zip_bytes) as zf:
                 names = zf.namelist()
-                image_names = [n for n in names if not n.endswith(".json")]
-                audit_names = [n for n in names if n.endswith(".json")]
-                images = {name: zf.read(name) for name in image_names}
-                audit_json = zf.read(audit_names[0]).decode("utf-8") if audit_names else None
+                images = {n: zf.read(n) for n in names if n.endswith((".png", ".jpg", ".jpeg", ".webp"))}
+                manifest = json.loads(zf.read("manifest.json")) if "manifest.json" in names else None
+                audit_json = zf.read("audit_trail.json").decode("utf-8") if "audit_trail.json" in names else None
 
             zip_bytes.seek(0)
             st.session_state.pipeline_results = {
-                "image_names": image_names,
                 "images": images,
+                "manifest": manifest,
                 "zip_bytes": zip_bytes.getvalue(),
                 "audit_json": audit_json,
+                "original_image_bytes": snap["image_bytes"],
+                "original_image_name": snap["image_name"],
             }
             st.session_state.is_running = False
             st.rerun()
@@ -377,30 +378,84 @@ if st.session_state.trigger_run:
 # ── 5. Results (persisted in session state, survives download reruns) ─────────
 if st.session_state.pipeline_results is not None:
     results = st.session_state.pipeline_results
+    manifest = results.get("manifest")
 
     st.header("5. Results")
     st.success("✅ Pipeline completed successfully!")
 
-    if results["image_names"]:
-        st.subheader("Edited Images")
-        cols = st.columns(min(len(results["image_names"]), 3))
-        for idx, img_name in enumerate(results["image_names"]):
-            img_data = results["images"][img_name]
-            col = cols[idx % len(cols)]
-            with col:
-                try:
-                    image = Image.open(io.BytesIO(img_data))
-                    st.image(image, caption=img_name, use_container_width=True)
-                except Exception:
-                    st.warning(f"Could not preview {img_name}")
-                st.download_button(
-                    label=f"⬇️ Download {img_name}",
-                    data=img_data,
-                    file_name=img_name,
-                    mime="image/png",
-                    key=f"dl_{img_name}",
-                    use_container_width=True,
-                )
+    original_bytes = results.get("original_image_bytes")
+    original_name = results.get("original_image_name", "Original")
+
+    if manifest and manifest.get("recommendations"):
+        for rec_entry in manifest["recommendations"]:
+            rec_title = rec_entry.get("title") or rec_entry.get("id", "Recommendation")
+            rec_desc = rec_entry.get("description", "")
+            best_name = rec_entry.get("best_variant")
+            other_names = rec_entry.get("other_variants", [])
+
+            with st.expander(f"📌 {rec_title}", expanded=True):
+                if rec_desc:
+                    st.caption(rec_desc)
+
+                all_variants = ([best_name] if best_name else []) + other_names
+                # Build column headers: Original + Best + others
+                headers = ["Original"] + (["⭐ Best variant"] if best_name else []) + [f"Variant {i + 1}" for i in range(len(other_names))]
+                cols = st.columns(len(headers))
+
+                # Original image
+                with cols[0]:
+                    st.markdown(f"**{headers[0]}**")
+                    if original_bytes:
+                        try:
+                            st.image(Image.open(io.BytesIO(original_bytes)), use_container_width=True, caption=original_name)
+                        except Exception:
+                            st.warning("Could not preview original image.")
+
+                col_offset = 1
+                # Best variant
+                if best_name and best_name in results["images"]:
+                    with cols[col_offset]:
+                        st.markdown(f"**{headers[col_offset]}**")
+                        img_data = results["images"][best_name]
+                        try:
+                            st.image(Image.open(io.BytesIO(img_data)), use_container_width=True, caption=best_name)
+                        except Exception:
+                            st.warning(f"Could not preview {best_name}")
+                        st.download_button(
+                            label="⬇️ Download",
+                            data=img_data,
+                            file_name=best_name,
+                            mime="image/png",
+                            key=f"dl_{best_name}",
+                            use_container_width=True,
+                        )
+                    col_offset += 1
+
+                # Other variants
+                for i, var_name in enumerate(other_names):
+                    if var_name in results["images"]:
+                        with cols[col_offset + i]:
+                            st.markdown(f"**{headers[col_offset + i]}**")
+                            img_data = results["images"][var_name]
+                            try:
+                                st.image(Image.open(io.BytesIO(img_data)), use_container_width=True, caption=var_name)
+                            except Exception:
+                                st.warning(f"Could not preview {var_name}")
+                            st.download_button(
+                                label="⬇️ Download",
+                                data=img_data,
+                                file_name=var_name,
+                                mime="image/png",
+                                key=f"dl_{var_name}",
+                                use_container_width=True,
+                            )
+    else:
+        # Fallback: no manifest — display all images in a grid
+        for img_name, img_data in results["images"].items():
+            try:
+                st.image(Image.open(io.BytesIO(img_data)), caption=img_name, use_container_width=True)
+            except Exception:
+                st.warning(f"Could not preview {img_name}")
 
     st.subheader("Download All")
     st.download_button(
