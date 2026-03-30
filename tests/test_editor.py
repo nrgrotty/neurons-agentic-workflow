@@ -12,15 +12,13 @@ import pytest
 
 from neurons_agentic_workflow.creative_editor.models import (
     BrandGuidelines,
-    EditorInput,
+    EditorWorkerState,
     Recommendation,
     RecommendationType,
     SubTask,
 )
-from google import genai
-from google.genai import types
 
-from neurons_agentic_workflow.creative_editor.service import edit_creative
+from neurons_agentic_workflow.creative_editor.service.nodes import editor_worker_node
 
 IMAGE_PATH = Path(__file__).parent.parent / "input" / "creative_1.png"
 
@@ -41,39 +39,14 @@ RECOMMENDATION = Recommendation(
     type=RecommendationType.CONTRAST_SALIENCE,
 )
 
-@pytest.mark.asyncio
-async def test_edit_creative_raw_response(tmp_path):
-    """Print raw response parts from gemini-2.5-flash-image to debug missing image output."""
-    assert IMAGE_PATH.exists(), f"Test image not found: {IMAGE_PATH}"
-
-    image_bytes = IMAGE_PATH.read_bytes()
-    client = genai.Client()
-
-    response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash-image",
-        contents=[
-            types.Content(
-                parts=[
-                    types.Part(inline_data=types.Blob(mime_type="image/png", data=image_bytes)),
-                    types.Part(text="Add a subtle blue tint to the background."),
-                ]
-            )
-        ],
-        config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
-    )
-
-    print(f"\nFinish reason: {response.candidates[0].finish_reason}")
-    for i, part in enumerate(response.candidates[0].content.parts):
-        if part.inline_data is not None:
-            print(f"  part[{i}]: IMAGE mime={part.inline_data.mime_type} size={len(part.inline_data.data)}")
-        else:
-            print(f"  part[{i}]: TEXT {repr(part.text)[:300]}")
 
 
 @pytest.mark.asyncio
-async def test_edit_creative_integration(tmp_path):
-    """Hit the real Gemini API and assert an image is returned.
+async def test_editor_worker_node_integration(tmp_path):
+    """Run editor_worker_node against the real Gemini API for one subtask.
 
+    Asserts that the node completes the editor→critic loop and returns
+    an edited image together with an audit trail.
     Requires GOOGLE_API_KEY to be set and network access.
     """
     assert IMAGE_PATH.exists(), f"Test image not found: {IMAGE_PATH}"
@@ -81,13 +54,18 @@ async def test_edit_creative_integration(tmp_path):
     input_image = tmp_path / IMAGE_PATH.name
     shutil.copy(IMAGE_PATH, input_image)
 
-    editor_input = EditorInput(
+    state = EditorWorkerState(
         image=input_image,
+        recommendation=RECOMMENDATION,
+        brand_guidelines=BRAND_GUIDELINES,
         subtask=SubTask(description="Add a subtle blue tint to the background."),
     )
 
-    result = await edit_creative(editor_input)
+    result = await editor_worker_node(state.model_dump())
 
-    assert result.edited_image.exists()
-    assert result.edited_image.stat().st_size > 0
-    print(f"\nEdited image saved to: {result.edited_image}")
+    assert "edited_images" in result
+    assert len(result["edited_images"]) == 1
+    
+    edited_path = result["edited_images"][0]
+    assert Path(edited_path).exists()
+    assert len(result.get("audit_trail", [])) > 0

@@ -31,34 +31,17 @@ class PipelineInput(BaseModel):
     brand_guidelines: BrandGuidelines
     recommendations: list[Recommendation]
 
-class PlannerInput(BaseModel):
-    brand_guidelines: BrandGuidelines
-    recommendation: Recommendation
-
 class SubTask(BaseModel):
     description: str
     index: int = 0
     reasoning: str = ""
 
-
 class PlannerOutput(BaseModel):
     subtasks: list[SubTask]
     reasoning: str
 
-class EditorInput(BaseModel):
-    image: Path
-    subtask: SubTask
-
-
 class EditorOutput(BaseModel):
     edited_image: Path
-
-
-class CriticInput(BaseModel):
-    edited_image: Path
-    recommendation: Recommendation
-    brand_guidelines: BrandGuidelines
-
 class CriticOutput(BaseModel):
     approval: bool
     feedback: str
