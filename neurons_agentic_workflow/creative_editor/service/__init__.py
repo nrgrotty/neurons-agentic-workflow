@@ -1,4 +1,5 @@
 
+"""Service entry points for the creative editor workflow."""
 from langsmith import traceable
 
 from neurons_agentic_workflow.creative_editor.models import (
@@ -39,12 +40,8 @@ async def run_pipeline(input: PipelineInput) -> PipelineOutput:
         recommendations=input.recommendations,
     )
     final_state = await pipeline.ainvoke(initial_state)
-    if isinstance(final_state, dict):
-        final_images = final_state["final_images"]
-        audit_trail = final_state.get("audit_trail", [])
-    else:
-        final_images = final_state.final_images
-        audit_trail = final_state.audit_trail
+    final_images = final_state["final_images"]
+    audit_trail = final_state.get("audit_trail", [])
     return PipelineOutput(
         final_images=[EditorOutput(edited_image=img) for img in final_images],
         audit_trail=audit_trail,

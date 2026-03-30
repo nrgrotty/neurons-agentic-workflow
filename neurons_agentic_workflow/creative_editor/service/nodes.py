@@ -294,12 +294,8 @@ async def _refiner(state: EditorWorkerState) -> dict:
 async def editor_worker_node(state: dict) -> dict:
     """Run the editor_worker subgraph for one subtask. Returns edited_images for fan-in."""
     final = await _editor_worker_subgraph.ainvoke(state)
-    if isinstance(final, dict):
-        edited_image = final["edited_image"]
-        worker_audit = final.get("audit_trail", [])
-    else:
-        edited_image = final.edited_image
-        worker_audit = final.audit_trail
+    edited_image = final["edited_image"]
+    worker_audit = final.get("audit_trail", [])
     return {"edited_images": [edited_image], "audit_trail": worker_audit}
 
 
