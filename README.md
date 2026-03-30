@@ -56,6 +56,10 @@ It runs each of the recommendations in parallel through an agentic workflow that
 - Spawns 3 variants per recommendation, with an editor, critic and refiner, that implement an "evalutor-optimizer" loop
 - Uses the evaluation plan to rank the different variants and select the best
 
+To visualize the workflow, run 
+`poetry run ./visualize_graph.py`
+This saves 2 png's with illustration of the graphs.
+
 ## Testing
 - `poetry run pytest`
 
