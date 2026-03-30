@@ -14,8 +14,8 @@
     LANGSMITH_PROJECT
 
 ### Run
-- `poetry run python ./main.py`
-- You can access the docs through the browser
+- `poetry run python ./main.py` in 1 terminal
+- `poetry run streamlit run frontend.py` in  another terminal
 
 ## To deploy
 This repo is synchronized with a service in Render. The configuration is found in render.yaml.
