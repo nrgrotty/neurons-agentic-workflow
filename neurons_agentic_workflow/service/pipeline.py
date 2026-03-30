@@ -2,11 +2,11 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
-from neurons_agentic_workflow.creative_editor.models import (
+from neurons_agentic_workflow.models import (
     GraphState,
     PipelineState,
 )
-from neurons_agentic_workflow.creative_editor.service.graph import main_graph
+from neurons_agentic_workflow.service.graph import main_graph
 
 async def _recommendation_branch(state: GraphState) -> dict:
     """Run the full per-recommendation graph and return its final_image for fan-in."""

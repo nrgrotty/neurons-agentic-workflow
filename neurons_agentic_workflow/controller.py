@@ -13,16 +13,16 @@ from google.api_core.exceptions import GoogleAPICallError, ResourceExhausted
 from langsmith import traceable
 from pydantic import ValidationError
 
-from neurons_agentic_workflow.creative_editor.models import (
+from neurons_agentic_workflow.models import (
     BrandGuidelines,
     PipelineInput,
     PipelineOutput,
     Recommendation,
 )
-from neurons_agentic_workflow.creative_editor.service import (
+from neurons_agentic_workflow.service import (
     run_pipeline,
 )
-from neurons_agentic_workflow.creative_editor.service.nodes import InvalidImageTypeError, MaxRetriesExceededError
+from neurons_agentic_workflow.service.nodes import InvalidImageTypeError, MaxRetriesExceededError
 
 router = APIRouter(prefix="/creative-editor", tags=["creative-editor"])
 

@@ -2,12 +2,12 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
-from neurons_agentic_workflow.creative_editor.models import (
+from neurons_agentic_workflow.models import (
     EditorWorkerState,
     GraphState,
     SubTask,
 )
-from neurons_agentic_workflow.creative_editor.service.nodes import (
+from neurons_agentic_workflow.service.nodes import (
     evaluation_planner_node,
     editor_planner_node,
     synthesizer_node,

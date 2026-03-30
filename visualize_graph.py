@@ -3,8 +3,8 @@ Plot graph and subgraphs visualization.
 """
 
 from pathlib import Path
-from neurons_agentic_workflow.creative_editor.service.graph import main_graph
-from neurons_agentic_workflow.creative_editor.service.nodes import _editor_worker_subgraph
+from neurons_agentic_workflow.service.graph import main_graph
+from neurons_agentic_workflow.service.nodes import _editor_worker_subgraph
 
 root = Path(__file__).parent.parent
 

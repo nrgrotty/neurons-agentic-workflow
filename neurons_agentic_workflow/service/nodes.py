@@ -13,7 +13,7 @@ from langsmith import wrappers
 from pydantic import BaseModel
 from langgraph.graph import StateGraph, END
 
-from neurons_agentic_workflow.creative_editor.models import (
+from neurons_agentic_workflow.models import (
     AuditEntry,
     CriticOutput,
     EvaluationMetrics,

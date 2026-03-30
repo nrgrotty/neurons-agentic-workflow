@@ -2,13 +2,13 @@
 """Service entry points for the creative editor workflow."""
 from langsmith import traceable
 
-from neurons_agentic_workflow.creative_editor.models import (
+from neurons_agentic_workflow.models import (
     PipelineInput,
     EditorOutput,
     PipelineOutput,
     PipelineState,
 )
-from neurons_agentic_workflow.creative_editor.service.pipeline import pipeline
+from neurons_agentic_workflow.service.pipeline import pipeline
 
 
 

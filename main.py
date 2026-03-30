@@ -1,6 +1,6 @@
 import logging
 from fastapi import FastAPI
-from neurons_agentic_workflow.creative_editor.controller import router
+from neurons_agentic_workflow.controller import router
 from pathlib import Path
 
 # stdlib logging kept for uvicorn/fastapi infrastructure messages
