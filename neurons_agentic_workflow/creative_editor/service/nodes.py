@@ -1,4 +1,6 @@
 import base64
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -11,6 +13,7 @@ from pydantic import BaseModel
 from langgraph.graph import StateGraph, END
 
 from neurons_agentic_workflow.creative_editor.models import (
+    AuditEntry,
     CriticOutput,
     EvaluationMetrics,
     GraphState,
@@ -26,6 +29,7 @@ MAX_ITERATIONS = 3
 
 class _BestImage(BaseModel):
     index: int  # 0-based index into the candidates list
+    reasoning: str
 
 _planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(PlannerOutput)
 _metrics_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluationMetrics)
@@ -48,10 +52,17 @@ async def planner_node(state: GraphState) -> dict:
             f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
             f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}"
         )),
-        HumanMessage(content="Decompose the recommendation into editing subtasks."),
+        HumanMessage(content="Decompose the recommendation into editing subtasks and explain your reasoning."),
     ]
     result: PlannerOutput = await _planner_llm.ainvoke(messages)
-    return {"subtasks": result.subtasks}
+    entry = AuditEntry(
+        node="planner",
+        timestamp=datetime.now(tz=timezone.utc),
+        decision=f"Decomposed into {len(result.subtasks)} subtask(s): "
+                 + "; ".join(s.description for s in result.subtasks),
+        reasoning=result.reasoning,
+    )
+    return {"subtasks": result.subtasks, "audit_trail": [entry]}
 
 
 async def metrics_node(state: GraphState) -> dict:
@@ -66,16 +77,40 @@ async def metrics_node(state: GraphState) -> dict:
             f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
             f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}"
         )),
-        HumanMessage(content="Define the evaluation metrics for assessing edited images."),
+        HumanMessage(content="Define the evaluation metrics for assessing edited images and explain your reasoning."),
     ]
     result: EvaluationMetrics = await _metrics_llm.ainvoke(messages)
-    return {"evaluation_metrics": result}
+    entry = AuditEntry(
+        node="metrics",
+        timestamp=datetime.now(tz=timezone.utc),
+        decision=f"Defined {len(result.metrics)} metric(s): "
+                 + ", ".join(f"{m.name} (w={m.weight})" for m in result.metrics),
+        reasoning=result.reasoning,
+    )
+    return {"evaluation_metrics": result, "audit_trail": [entry]}
+
+
+def _write_audit_trail(state: GraphState, synthesizer_entry: list[AuditEntry]) -> None:
+    """Persist the full audit trail for a recommendation to a JSON file in the output folder."""
+    all_entries = state.audit_trail + synthesizer_entry
+    audit_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_audit.json"
+    audit_path.write_text(
+        json.dumps([e.model_dump(mode="json") for e in all_entries], indent=2),
+        encoding="utf-8",
+    )
 
 
 async def synthesizer_node(state: GraphState) -> dict:
     """Select the best edited image using the evaluation metrics derived from the recommendation."""
     if len(state.edited_images) == 1:
-        return {"final_image": state.edited_images[0]}
+        entry = AuditEntry(
+            node="synthesizer",
+            timestamp=datetime.now(tz=timezone.utc),
+            decision="Single candidate — selected without scoring.",
+            reasoning="Only one subtask produced an image, so no comparison was needed.",
+        )
+        _write_audit_trail(state, [entry])
+        return {"final_image": state.edited_images[0], "audit_trail": [entry]}
 
     metrics_description = (
         state.evaluation_metrics.model_dump_json(indent=2)
@@ -98,7 +133,14 @@ async def synthesizer_node(state: GraphState) -> dict:
     })
     result: _BestImage = await _synthesizer_llm.ainvoke([HumanMessage(content=content)])
     best_index = max(0, min(result.index, len(state.edited_images) - 1))
-    return {"final_image": state.edited_images[best_index]}
+    entry = AuditEntry(
+        node="synthesizer",
+        timestamp=datetime.now(tz=timezone.utc),
+        decision=f"Selected candidate {best_index} as the best edited image.",
+        reasoning=result.reasoning,
+    )
+    _write_audit_trail(state, [entry])
+    return {"final_image": state.edited_images[best_index], "audit_trail": [entry]}
 
 
 
@@ -137,7 +179,15 @@ async def _editor(state: EditorWorkerState) -> dict:
     for part in response.candidates[0].content.parts:
         if part.inline_data is not None:
             output_path.write_bytes(part.inline_data.data)
-            return {"edited_image": output_path}
+            entry = AuditEntry(
+                node="editor",
+                timestamp=datetime.now(tz=timezone.utc),
+                decision=f"Applied editing instruction to produce '{output_path.name}'.",
+                reasoning=f"Instruction applied: {state.subtask.description}",
+                subtask_index=state.subtask.index,
+                iteration=state.iteration,
+            )
+            return {"edited_image": output_path, "audit_trail": [entry]}
 
     raise ValueError(
         f"Editor model did not return an image. "
@@ -166,7 +216,15 @@ async def _critic(state: EditorWorkerState) -> dict:
         ]),
     ]
     result: CriticOutput = await _critic_llm.ainvoke(messages)
-    return {"approved": result.approval, "critic_feedback": result.feedback}
+    entry = AuditEntry(
+        node="critic",
+        timestamp=datetime.now(tz=timezone.utc),
+        decision="Approved" if result.approval else "Rejected",
+        reasoning=result.reasoning,
+        subtask_index=state.subtask.index,
+        iteration=state.iteration,
+    )
+    return {"approved": result.approval, "critic_feedback": result.feedback, "audit_trail": [entry]}
 
 
 async def _refiner(state: EditorWorkerState) -> dict:
@@ -186,14 +244,27 @@ async def _refiner(state: EditorWorkerState) -> dict:
         )),
     ]
     refined: SubTask = await _refiner_llm.ainvoke(messages)
-    return {"sub_task": refined, "iteration": state.iteration + 1}
+    entry = AuditEntry(
+        node="refiner",
+        timestamp=datetime.now(tz=timezone.utc),
+        decision=f"Refined instruction: {refined.description}",
+        reasoning=refined.reasoning,
+        subtask_index=state.subtask.index,
+        iteration=state.iteration,
+    )
+    return {"subtask": refined, "iteration": state.iteration + 1, "audit_trail": [entry]}
 
 
 async def editor_worker_node(state: dict) -> dict:
     """Run the editor_worker subgraph for one subtask. Returns edited_images for fan-in."""
     final = await _editor_worker_subgraph.ainvoke(state)
-    edited_image = final["edited_image"] if isinstance(final, dict) else final.edited_image
-    return {"edited_images": [edited_image]}
+    if isinstance(final, dict):
+        edited_image = final["edited_image"]
+        worker_audit = final.get("audit_trail", [])
+    else:
+        edited_image = final.edited_image
+        worker_audit = final.audit_trail
+    return {"edited_images": [edited_image], "audit_trail": worker_audit}
 
 
 def _should_continue(state: EditorWorkerState) -> Literal["Accepted", "Rejected"]:

@@ -1,4 +1,5 @@
 import operator
+from datetime import datetime
 from enum import Enum
 from typing import Annotated
 
@@ -25,7 +26,7 @@ class Recommendation(BaseModel):
     description: str
     type: RecommendationType
 
-class CreativeEditorInput(BaseModel):
+class PipelineInput(BaseModel):
     image: Path
     brand_guidelines: BrandGuidelines
     recommendations: list[Recommendation]
@@ -37,10 +38,12 @@ class PlannerInput(BaseModel):
 class SubTask(BaseModel):
     description: str
     index: int = 0
+    reasoning: str = ""
 
 
 class PlannerOutput(BaseModel):
     subtasks: list[SubTask]
+    reasoning: str
 
 class EditorInput(BaseModel):
     image: Path
@@ -59,6 +62,7 @@ class CriticInput(BaseModel):
 class CriticOutput(BaseModel):
     approval: bool
     feedback: str
+    reasoning: str
 
 
 class EvaluationMetric(BaseModel):
@@ -69,6 +73,17 @@ class EvaluationMetric(BaseModel):
 
 class EvaluationMetrics(BaseModel):
     metrics: list[EvaluationMetric]
+    reasoning: str
+
+
+class AuditEntry(BaseModel):
+    """A single recorded decision with its rationale."""
+    node: str
+    timestamp: datetime
+    decision: str
+    reasoning: str
+    subtask_index: int | None = None
+    iteration: int | None = None
 
 
 class EditorWorkerState(BaseModel):
@@ -81,6 +96,7 @@ class EditorWorkerState(BaseModel):
     approved: bool | None = None
     critic_feedback: str | None = None
     iteration: int = 0
+    audit_trail: Annotated[list[AuditEntry], operator.add] = []
 
 
 class GraphState(BaseModel):
@@ -91,6 +107,7 @@ class GraphState(BaseModel):
     evaluation_metrics: EvaluationMetrics | None = None
     edited_images: Annotated[list[Path], operator.add] = []
     final_image: Path | None = None
+    audit_trail: Annotated[list[AuditEntry], operator.add] = []
 
 
 class PipelineState(BaseModel):
@@ -98,3 +115,9 @@ class PipelineState(BaseModel):
     brand_guidelines: BrandGuidelines
     recommendations: list[Recommendation]
     final_images: Annotated[list[Path], operator.add] = []
+    audit_trail: Annotated[list[AuditEntry], operator.add] = []
+
+
+class PipelineOutput(BaseModel):
+    final_images: list[EditorOutput]
+    audit_trail: list[AuditEntry]
