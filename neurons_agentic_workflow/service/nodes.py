@@ -72,7 +72,7 @@ async def editor_planner_node(state: GraphState) -> dict:
     messages = [
         SystemMessage(content=(
             "You are a creative image editor planner. "
-            "Decompose the recommendation into one or more independent, precise editing "
+            "Decompose the recommendation into one to 3, precise editing "
             "instructions, each targeting a distinct visual aspect. "
             "Each subtask must be self-contained and applicable to the original image independently. "
             "Strictly respect the brand guidelines — do NOT change any protected region, "
