@@ -28,7 +28,6 @@ async def edit_creative(editor_input: EditorInput) -> EditorOutput:
     return EditorOutput(edited_image=result["edited_images"][0])
 
 
-@traceable(name="apply-recommendations")
 async def run_pipeline(input: CreativeEditorInput) -> list[EditorOutput]:
     """Full pipeline: parallel recommendation branches → each runs planner+workers+synthesizer."""
     initial_state = PipelineState(

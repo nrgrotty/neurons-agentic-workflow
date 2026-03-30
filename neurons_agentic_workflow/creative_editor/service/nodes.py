@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from langsmith import traceable
+from langsmith import wrappers
 from pydantic import BaseModel
 from langgraph.graph import StateGraph, END
 
@@ -102,7 +102,6 @@ async def synthesizer_node(state: GraphState) -> dict:
 
 
 
-@traceable(name="editor-node", run_type="llm")
 async def _editor(state: EditorWorkerState) -> dict:
     """Apply the subtask instruction to the image."""
     prompt_text = (
@@ -110,9 +109,17 @@ async def _editor(state: EditorWorkerState) -> dict:
         f"{state.subtask.description}"
     )
     # gemini-2.5-flash-image is not yet available via langchain-google-genai
-    client = genai.Client()
+    gemini_client = genai.Client()
     image_bytes = Path(state.image).read_bytes()
-
+    client = wrappers.wrap_gemini(
+        gemini_client,
+        tracing_extra={
+            "tags": ["gemini", "python"],
+            "metadata": {
+                "integration": "google-genai",
+            },
+        },
+    )
     response = await client.aio.models.generate_content(
         model="gemini-2.5-flash-image",
         contents=[

@@ -1,0 +1,32 @@
+{
+    "image": "/home/neus/Documents/git/neurons-agentic-workflow/input/creative_2.png",
+    "brand_guidelines": {
+      "protected_regions": [
+        "Do not modify or remove the brand logo",
+        "Do not alter the product imagery (headphones)"
+      ],
+      "typography": "Maintain existing font style; text modifications should preserve readability",
+      "aspect_ratio": "Maintain original aspect ratio (636x1063)",
+      "brand_elements": "Product imagery must remain the focal point of the composition"
+    },
+    "recommendations": [
+      {
+        "id": "rec_1",
+        "title": "Deepen Emotional Narrative with Lifestyle Context",
+        "description": "Refine product image styling and decorative elements to communicate a desired lifestyle or emotional state—such as freedom, discovery, or personal expression—rather than surface-level fun. This elevates emotional resonance and strengthens the motivational hook driving conversion action.",
+        "type": "colour_mood"
+      },
+      {
+        "id": "rec_2",
+        "title": "Reframe Headline for Conversion Motivation",
+        "description": "Shift from benefit-focused language to messaging that emphasizes discovery, personalization, or free trial exclusivity. Adding urgency or personal relevance moves viewers from passive interest to active consideration of the conversion action.",
+        "type": "copy_messaging"
+      },
+      {
+        "id": "rec_3",
+        "title": "Enhance Headline Visual Dominance",
+        "description": "Increase contrast between 'Enjoy your favorite songs on-demand' and the gradient background through bolder typography, increased letter spacing, or a semi-transparent panel. This ensures the headline captures attention within the first two seconds and serves as your primary conversion entry point.",
+        "type": "contrast_salience"
+      }
+    ]
+}
