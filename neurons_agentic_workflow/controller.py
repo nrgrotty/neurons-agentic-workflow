@@ -28,15 +28,13 @@ router = APIRouter(prefix="/creative-editor", tags=["creative-editor"])
 
 
 def _parse_recommendations(
-    recommendations: Annotated[
-        list[str],
-        Form(
-            description='Repeat this field for each recommendation. Each value is a JSON object: {"id": "rec_1", "title": "...", "description": "...", "type": "colour_mood|copy_messaging|contrast_salience|composition"}',
-        ),
-    ],
+    recommendations: str = Form(
+        ...,
+        description='JSON array of recommendations: [{"id": "rec_1", "title": "...", "description": "...", "type": "colour_mood|copy_messaging|contrast_salience|composition"}, ...]',
+    ),
 ) -> list[Recommendation]:
     try:
-        return [Recommendation.model_validate(json.loads(r)) for r in recommendations]
+        return [Recommendation.model_validate(r) for r in json.loads(recommendations)]
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=422,
