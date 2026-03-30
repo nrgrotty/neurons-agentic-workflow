@@ -91,12 +91,6 @@ class GraphState(BaseModel):
     edited_images: Annotated[list[Path], operator.add] = []
     final_image: Path | None = None
     audit_trail: Annotated[list[AuditEntry], operator.add] = []
-
-
-class PipelineFormInput(BaseModel):
-    brand_guidelines: BrandGuidelines
-    recommendations: list[Recommendation]
-
 class PipelineState(BaseModel):
     image: Path
     brand_guidelines: BrandGuidelines
