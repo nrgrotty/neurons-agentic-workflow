@@ -56,6 +56,10 @@ It runs each of the recommendations in parallel through an agentic workflow that
 - Spawns 3 variants per recommendation, with an editor, critic and refiner, that implement an "evalutor-optimizer" loop
 - Uses the evaluation plan to rank the different variants and select the best
 
+## Testing
+- `poetry run pytest`
+
+A single integration test is set up, as an example.
 
 ## Notes
 The assignment is being suggested as a part of a job interview process for "AI engineer" in Neurons. 
