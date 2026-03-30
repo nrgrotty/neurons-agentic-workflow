@@ -59,6 +59,21 @@ class EvaluationMetrics(BaseModel):
     reasoning: str
 
 
+class MetricRank(BaseModel):
+    metric_name: str
+    rank: int  # 1 = best, N = worst
+
+
+class VariantRanking(BaseModel):
+    variant_index: int
+    ranks: list[MetricRank]
+
+
+class EvaluatorRankings(BaseModel):
+    variant_rankings: list[VariantRanking]
+    reasoning: str
+
+
 class AuditEntry(BaseModel):
     """A single recorded decision with its rationale."""
     node: str

@@ -9,7 +9,7 @@ from neurons_agentic_workflow.models import (
 from neurons_agentic_workflow.service.nodes import (
     evaluation_planner_node,
     editor_planner_node,
-    synthesizer_node,
+    evaluator_node,
     editor_worker_node,
 )
 
@@ -34,13 +34,13 @@ def _build_graph():
     graph.add_node("editor_planner", editor_planner_node)
     graph.add_node("evaluation_planner", evaluation_planner_node)
     graph.add_node("editor_worker", editor_worker_node)
-    graph.add_node("synthesizer", synthesizer_node)
+    graph.add_node("evaluator", evaluator_node)
 
     graph.add_edge(START, "editor_planner")
     graph.add_edge(START, "evaluation_planner")
     graph.add_conditional_edges("editor_planner", _orchestrate, ["editor_worker"])
-    graph.add_edge("editor_worker", "synthesizer")
-    graph.add_edge("synthesizer", END)
+    graph.add_edge("editor_worker", "evaluator")
+    graph.add_edge("evaluator", END)
     return graph.compile()
 
 

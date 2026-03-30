@@ -10,13 +10,13 @@ from google.genai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import wrappers
-from pydantic import BaseModel
 from langgraph.graph import StateGraph, END
 
 from neurons_agentic_workflow.models import (
     AuditEntry,
     CriticOutput,
     EvaluationMetrics,
+    EvaluatorRankings,
     GraphState,
     PlannerOutput,
     RefinerOutput,
@@ -55,15 +55,11 @@ def _validate_image_file(path: Path) -> str:
         )
     return mime_type
 
-class _BestImage(BaseModel):
-    index: int  # 0-based index into the candidates list
-    reasoning: str
-
-_planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(PlannerOutput)
-_metrics_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluationMetrics)
+_editor_planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(PlannerOutput)
+_evaluation_planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluationMetrics)
 _critic_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(CriticOutput)
 _refiner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(RefinerOutput)
-_synthesizer_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(_BestImage)
+_evaluator_ranking_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluatorRankings)
 
 
 
@@ -82,7 +78,7 @@ async def editor_planner_node(state: GraphState) -> dict:
         )),
         HumanMessage(content="Write a comprehensive editing description and explain your reasoning."),
     ]
-    result: PlannerOutput = await _planner_llm.ainvoke(messages)
+    result: PlannerOutput = await _editor_planner_llm.ainvoke(messages)
     entry = AuditEntry(
         node="planner",
         timestamp=datetime.now(tz=timezone.utc),
@@ -106,7 +102,7 @@ async def evaluation_planner_node(state: GraphState) -> dict:
         )),
         HumanMessage(content="Define the evaluation metrics for assessing edited images and explain your reasoning."),
     ]
-    result: EvaluationMetrics = await _metrics_llm.ainvoke(messages)
+    result: EvaluationMetrics = await _evaluation_planner_llm.ainvoke(messages)
     entry = AuditEntry(
         node="metrics",
         timestamp=datetime.now(tz=timezone.utc),
@@ -130,45 +126,59 @@ def _write_audit_trail(state: GraphState, synthesizer_entry: list[AuditEntry]) -
         raise RuntimeError(f"Failed to write audit trail to '{audit_path}': {exc}") from exc
 
 
-async def synthesizer_node(state: GraphState) -> dict:
-    """Select the best edited image using the evaluation metrics derived from the recommendation."""
+async def evaluator_node(state: GraphState) -> dict:
+    """Rank variant images per metric then pick the variant with the lowest total rank score."""
     if len(state.edited_images) == 1:
         entry = AuditEntry(
-            node="synthesizer",
+            node="evaluator",
             timestamp=datetime.now(tz=timezone.utc),
-            decision="Single candidate — selected without scoring.",
+            decision="Single variant — selected without scoring.",
             reasoning="Only one variant produced an image, so no comparison was needed.",
         )
         _write_audit_trail(state, [entry])
         return {"final_image": state.edited_images[0], "audit_trail": [entry]}
 
-    metrics_description = (
+    n = len(state.edited_images)
+    metrics_json = (
         state.evaluation_metrics.model_dump_json(indent=2)
         if state.evaluation_metrics
-        else "No metrics available. Use your best judgement."
+        else "[]"
     )
 
+    # Step 1: LLM ranks every variant against every metric (1 = best, N = worst).
     content: list = []
     for i, img_path in enumerate(state.edited_images):
         _validate_image_file(img_path)
         img_b64 = base64.b64encode(img_path.read_bytes()).decode()
-        content.append({"type": "text", "text": f"Candidate {i} (variant {i}):"})
+        content.append({"type": "text", "text": f"Variant {i}:"})
         content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}})
     content.append({
         "type": "text",
         "text": (
-            "Score each candidate against the following evaluation metrics and return the "
-            "0-based index of the candidate with the highest weighted score.\n\n"
-            f"Evaluation Metrics:\n{metrics_description}"
+            f"Evaluation Metrics:\n{metrics_json}\n\n"
+            f"For each metric, rank all {n} variants from 1 (best) to {n} (worst). "
+            "Every variant must receive a unique rank for each metric."
         ),
     })
-    result: _BestImage = await _synthesizer_llm.ainvoke([HumanMessage(content=content)])
-    best_index = max(0, min(result.index, len(state.edited_images) - 1))
+    rankings: EvaluatorRankings = await _evaluator_ranking_llm.ainvoke([HumanMessage(content=content)])
+
+    # Organise per-variant score lists from the rankings.
+    variant_scores: dict[int, list[int]] = {i: [] for i in range(n)}
+    for vr in rankings.variant_rankings:
+        idx = max(0, min(vr.variant_index, n - 1))
+        for mr in vr.ranks:
+            variant_scores[idx].append(mr.rank)
+
+    # Step 2: sum each variant's scores directly.
+    totals: dict[int, int] = {i: sum(scores) for i, scores in variant_scores.items()}
+
+    best_index = min(totals, key=totals.__getitem__)
+    scores_summary = ", ".join(f"variant {i}: {s}" for i, s in sorted(totals.items()))
     entry = AuditEntry(
-        node="synthesizer",
+        node="evaluator",
         timestamp=datetime.now(tz=timezone.utc),
-        decision=f"Selected candidate {best_index} as the best edited image.",
-        reasoning=result.reasoning,
+        decision=f"Selected variant {best_index} (total score {totals[best_index]}). Scores: {scores_summary}.",
+        reasoning=rankings.reasoning,
     )
     _write_audit_trail(state, [entry])
     return {"final_image": state.edited_images[best_index], "audit_trail": [entry]}
