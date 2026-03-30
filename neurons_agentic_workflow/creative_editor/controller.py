@@ -1,19 +1,22 @@
+import io
+import json
 import tempfile
 import traceback
+import zipfile
 from pathlib import Path
 from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from google.api_core.exceptions import GoogleAPICallError, ResourceExhausted
 from langsmith import traceable
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from neurons_agentic_workflow.creative_editor.models import (
-    BrandGuidelines,
+    PipelineFormInput,
     PipelineInput,
     PipelineOutput,
-    Recommendation,
 )
 from neurons_agentic_workflow.creative_editor.service import (
     run_pipeline,
@@ -21,11 +24,6 @@ from neurons_agentic_workflow.creative_editor.service import (
 from neurons_agentic_workflow.creative_editor.service.nodes import InvalidImageTypeError, MaxRetriesExceededError
 
 router = APIRouter(prefix="/creative-editor", tags=["creative-editor"])
-
-
-class PipelineFormInput(BaseModel):
-    brand_guidelines: BrandGuidelines
-    recommendations: list[Recommendation]
 
 
 def _parse_pipeline_form_input(
@@ -47,13 +45,29 @@ async def _save_uploaded_image(image: UploadFile) -> Path:
         return Path(tmp.name)
 
 
-@router.post("/apply-recommendations", response_model=PipelineOutput)
+def _build_zip(output: PipelineOutput) -> io.BytesIO:
+    """Pack all edited images and the audit trail into an in-memory ZIP."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for i, editor_output in enumerate(output.final_images):
+            img_path = Path(editor_output.edited_image)
+            if img_path.exists():
+                zf.write(img_path, arcname=img_path.name)
+        audit_json = json.dumps(
+            [e.model_dump(mode="json") for e in output.audit_trail], indent=2
+        )
+        zf.writestr("audit_trail.json", audit_json)
+    buf.seek(0)
+    return buf
+
+
+@router.post("/apply-recommendations")
 @traceable(run_type="chain", name="apply_recommendations")
 async def apply_recommendations(
     image: UploadFile,
     parsed_input: Annotated[PipelineFormInput, Depends(_parse_pipeline_form_input)],
-) -> PipelineOutput:
-    """Full pipeline: for each recommendation, run planner+editor_editor_workers+synthesizer in parallel."""
+) -> StreamingResponse:
+    """Full pipeline: returns a ZIP containing one edited image per recommendation plus the audit trail."""
     image_path = await _save_uploaded_image(image)
     try:
         creative_editor_input = PipelineInput(
@@ -61,7 +75,13 @@ async def apply_recommendations(
             brand_guidelines=parsed_input.brand_guidelines,
             recommendations=parsed_input.recommendations,
         )
-        return await run_pipeline(creative_editor_input)
+        output = await run_pipeline(creative_editor_input)
+        zip_buf = _build_zip(output)
+        return StreamingResponse(
+            zip_buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": "attachment; filename=edited_creatives.zip"},
+        )
     except httpx.ConnectError as exc:
         raise HTTPException(
             status_code=503,
@@ -104,4 +124,5 @@ async def apply_recommendations(
         ) from exc
     finally:
         image_path.unlink(missing_ok=True)
+
 
