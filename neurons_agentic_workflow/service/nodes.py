@@ -19,7 +19,7 @@ from neurons_agentic_workflow.models import (
     EvaluationMetrics,
     GraphState,
     PlannerOutput,
-    SubTask,
+    RefinerOutput,
     EditorWorkerState,
 )
 
@@ -62,35 +62,34 @@ class _BestImage(BaseModel):
 _planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(PlannerOutput)
 _metrics_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluationMetrics)
 _critic_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(CriticOutput)
-_refiner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(SubTask)
+_refiner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(RefinerOutput)
 _synthesizer_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(_BestImage)
 
 
 
 async def editor_planner_node(state: GraphState) -> dict:
-    """Decompose the recommendation into one or more independent editing subtasks."""
+    """Produce a single comprehensive editing description from the recommendation."""
     messages = [
         SystemMessage(content=(
             "You are a creative image editor planner. "
-            "Decompose the recommendation into one to 3, precise editing "
-            "instructions, each targeting a distinct visual aspect. "
-            "Each subtask must be self-contained and applicable to the original image independently. "
+            "Write a single, comprehensive editing description that captures all the changes "
+            "needed to apply the recommendation to the image. "
+            "The description should be detailed and precise, covering every visual aspect that needs to change. "
             "Strictly respect the brand guidelines — do NOT change any protected region, "
             "typography, aspect ratio, or brand element.\n\n"
             f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
             f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}"
         )),
-        HumanMessage(content="Decompose the recommendation into editing subtasks and explain your reasoning."),
+        HumanMessage(content="Write a comprehensive editing description and explain your reasoning."),
     ]
     result: PlannerOutput = await _planner_llm.ainvoke(messages)
     entry = AuditEntry(
         node="planner",
         timestamp=datetime.now(tz=timezone.utc),
-        decision=f"Decomposed into {len(result.subtasks)} subtask(s): "
-                 + "; ".join(s.description for s in result.subtasks),
+        decision=f"Editing description: {result.editing_instructions}",
         reasoning=result.reasoning,
     )
-    return {"subtasks": result.subtasks, "audit_trail": [entry]}
+    return {"editing_instructions": result.editing_instructions, "audit_trail": [entry]}
 
 
 async def evaluation_planner_node(state: GraphState) -> dict:
@@ -138,7 +137,7 @@ async def synthesizer_node(state: GraphState) -> dict:
             node="synthesizer",
             timestamp=datetime.now(tz=timezone.utc),
             decision="Single candidate — selected without scoring.",
-            reasoning="Only one subtask produced an image, so no comparison was needed.",
+            reasoning="Only one variant produced an image, so no comparison was needed.",
         )
         _write_audit_trail(state, [entry])
         return {"final_image": state.edited_images[0], "audit_trail": [entry]}
@@ -153,7 +152,7 @@ async def synthesizer_node(state: GraphState) -> dict:
     for i, img_path in enumerate(state.edited_images):
         _validate_image_file(img_path)
         img_b64 = base64.b64encode(img_path.read_bytes()).decode()
-        content.append({"type": "text", "text": f"Candidate {i} (subtask: {state.subtasks[i].description}):"})
+        content.append({"type": "text", "text": f"Candidate {i} (variant {i}):"})
         content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}})
     content.append({
         "type": "text",
@@ -177,10 +176,10 @@ async def synthesizer_node(state: GraphState) -> dict:
 
 
 async def _editor(state: EditorWorkerState) -> dict:
-    """Apply the subtask instruction to the image."""
+    """Apply the editing description to the image."""
     prompt_text = (
         "Edit this image following these instructions precisely:\n"
-        f"{state.subtask.description}"
+        f"{state.editing_instructions}"
     )
     mime_type = _validate_image_file(state.image)
     client = wrappers.wrap_gemini(
@@ -207,10 +206,10 @@ async def _editor(state: EditorWorkerState) -> dict:
 
     if not response.candidates:
         raise ValueError(
-            f"Editor model returned no candidates for subtask '{state.subtask.description}'."
+            f"Editor model returned no candidates for variant '{state.variant_index}'."
         )
     candidate = response.candidates[0]
-    output_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_subtask{state.subtask.index}.png"
+    output_path = OUTPUT_FOLDER / f"{Path(state.image).stem}_{state.recommendation.id}_variant{state.variant_index}.png"
     for part in candidate.content.parts:
         if part.inline_data is not None:
             output_path.write_bytes(part.inline_data.data)
@@ -218,14 +217,14 @@ async def _editor(state: EditorWorkerState) -> dict:
                 node="editor",
                 timestamp=datetime.now(tz=timezone.utc),
                 decision=f"Applied editing instruction to produce '{output_path.name}'.",
-                reasoning=f"Instruction applied: {state.subtask.description}",
-                subtask_index=state.subtask.index,
+                reasoning=f"Instruction applied: {state.editing_instructions}",
+                variant_index=state.variant_index,
                 iteration=state.iteration,
             )
             return {"edited_image": output_path, "audit_trail": [entry]}
 
     raise ValueError(
-        f"Editor model did not return an image for subtask '{state.subtask.description}'. "
+        f"Editor model did not return an image for variant '{state.variant_index}'. "
         f"Response content: {candidate.content}"
     )
 
@@ -240,7 +239,7 @@ async def _critic(state: EditorWorkerState) -> dict:
             "correctly applies the recommendation while strictly respecting the brand guidelines.\n\n"
             f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
             f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}\n\n"
-            f"Editing instruction applied: {state.subtask.description}"
+            f"Editing description applied: {state.editing_instructions}"
         )),
         HumanMessage(content=[
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
@@ -257,42 +256,42 @@ async def _critic(state: EditorWorkerState) -> dict:
         timestamp=datetime.now(tz=timezone.utc),
         decision="Approved" if result.approval else "Rejected",
         reasoning=result.reasoning,
-        subtask_index=state.subtask.index,
+        variant_index=state.variant_index,
         iteration=state.iteration,
     )
     return {"approved": result.approval, "critic_feedback": result.feedback, "audit_trail": [entry]}
 
 
 async def _refiner(state: EditorWorkerState) -> dict:
-    """Produce a refined editing instruction based on critic feedback."""
+    """Produce a refined editing description based on critic feedback."""
     messages = [
         SystemMessage(content=(
             "You are a creative image editing optimizer. "
-            "Refine the editing instruction to address the critic feedback "
+            "Refine the editing description to address the critic feedback "
             "while strictly respecting the brand guidelines.\n\n"
             f"Brand Guidelines:\n{state.brand_guidelines.model_dump_json(indent=2)}\n\n"
             f"Recommendation:\n{state.recommendation.model_dump_json(indent=2)}"
         )),
         HumanMessage(content=(
-            f"Original instruction: {state.subtask.description}\n\n"
+            f"Original description: {state.editing_instructions}\n\n"
             f"Critic feedback: {state.critic_feedback}\n\n"
-            "Produce a refined editing instruction that addresses the feedback."
+            "Produce a refined editing description that addresses the feedback."
         )),
     ]
-    refined: SubTask = await _refiner_llm.ainvoke(messages)
+    refined: RefinerOutput = await _refiner_llm.ainvoke(messages)
     entry = AuditEntry(
         node="refiner",
         timestamp=datetime.now(tz=timezone.utc),
-        decision=f"Refined instruction: {refined.description}",
+        decision=f"Refined description: {refined.editing_instructions}",
         reasoning=refined.reasoning,
-        subtask_index=state.subtask.index,
+        variant_index=state.variant_index,
         iteration=state.iteration,
     )
-    return {"subtask": refined, "iteration": state.iteration + 1, "audit_trail": [entry]}
+    return {"editing_instructions": refined.editing_instructions, "iteration": state.iteration + 1, "audit_trail": [entry]}
 
 
 async def editor_worker_node(state: EditorWorkerState) -> dict:
-    """Run the editor_worker subgraph for one subtask. Returns edited_images for fan-in."""
+    """Run the editor_worker subgraph for one variant. Returns edited_images for fan-in."""
     final = await _editor_worker_subgraph.ainvoke(state)
     edited_image = final["edited_image"]
     worker_audit = final.get("audit_trail", [])

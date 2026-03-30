@@ -31,13 +31,13 @@ class PipelineInput(BaseModel):
     brand_guidelines: BrandGuidelines
     recommendations: list[Recommendation]
 
-class SubTask(BaseModel):
-    description: str
+class RefinerOutput(BaseModel):
+    editing_instructions: str
     index: int = 0
     reasoning: str = ""
 
 class PlannerOutput(BaseModel):
-    subtasks: list[SubTask]
+    editing_instructions: str
     reasoning: str
 
 class EditorOutput(BaseModel):
@@ -65,7 +65,7 @@ class AuditEntry(BaseModel):
     timestamp: datetime
     decision: str
     reasoning: str
-    subtask_index: int | None = None
+    variant_index: int | None = None
     iteration: int | None = None
 
 
@@ -74,7 +74,8 @@ class EditorWorkerState(BaseModel):
     image: Path
     recommendation: Recommendation
     brand_guidelines: BrandGuidelines
-    subtask: SubTask
+    editing_instructions: str
+    variant_index: int = 0
     edited_image: Path | None = None
     approved: bool | None = None
     critic_feedback: str | None = None
@@ -86,7 +87,7 @@ class GraphState(BaseModel):
     image: Path
     recommendation: Recommendation
     brand_guidelines: BrandGuidelines
-    subtasks: list[SubTask] = []
+    editing_instructions: str = ""
     evaluation_metrics: EvaluationMetrics | None = None
     edited_images: Annotated[list[Path], operator.add] = []
     final_image: Path | None = None

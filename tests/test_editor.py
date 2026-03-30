@@ -10,15 +10,14 @@ from pathlib import Path
 import shutil
 import pytest
 
-from neurons_agentic_workflow.creative_editor.models import (
+from neurons_agentic_workflow.models import (
     BrandGuidelines,
     EditorWorkerState,
     Recommendation,
     RecommendationType,
-    SubTask,
 )
 
-from neurons_agentic_workflow.creative_editor.service.nodes import editor_worker_node
+from neurons_agentic_workflow.service.nodes import editor_worker_node
 
 IMAGE_PATH = Path(__file__).parent.parent / "input" / "creative_1.png"
 
@@ -43,7 +42,7 @@ RECOMMENDATION = Recommendation(
 
 @pytest.mark.asyncio
 async def test_editor_worker_node_integration(tmp_path):
-    """Run editor_worker_node against the real Gemini API for one subtask.
+    """Run editor_worker_node against the real Gemini API for one variant.
 
     Asserts that the node completes the editor→critic loop and returns
     an edited image together with an audit trail.
@@ -58,7 +57,7 @@ async def test_editor_worker_node_integration(tmp_path):
         image=input_image,
         recommendation=RECOMMENDATION,
         brand_guidelines=BRAND_GUIDELINES,
-        subtask=SubTask(description="Add a subtle blue tint to the background."),
+        editing_instructions="Add a subtle blue tint to the background.",
     )
 
     result = await editor_worker_node(state.model_dump())

@@ -5,7 +5,6 @@ from langgraph.types import Send
 from neurons_agentic_workflow.models import (
     EditorWorkerState,
     GraphState,
-    SubTask,
 )
 from neurons_agentic_workflow.service.nodes import (
     evaluation_planner_node,
@@ -14,16 +13,19 @@ from neurons_agentic_workflow.service.nodes import (
     editor_worker_node,
 )
 
+NUM_VARIANTS = 3
+
 def _orchestrate(state: GraphState) -> list[Send]:
-    """Fan out: send each subtask to a parallel editor_worker."""
+    """Fan out: send the same editing description to N parallel editor_workers as distinct variants."""
     return [
         Send("editor_worker", EditorWorkerState(
             image=state.image,
             recommendation=state.recommendation,
             brand_guidelines=state.brand_guidelines,
-            subtask=SubTask(description=sub_task.description, index=i),
+            editing_instructions=state.editing_instructions,
+            variant_index=i,
         ).model_dump())
-        for i, sub_task in enumerate(state.subtasks)
+        for i in range(NUM_VARIANTS)
     ]
 
 
