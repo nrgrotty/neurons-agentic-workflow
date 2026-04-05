@@ -317,7 +317,7 @@ if st.session_state.trigger_run:
 
     # Fake progress bar: advances to 95 % over FAKE_DURATION seconds, then
     # waits for the thread to finish before jumping to 100 %.
-    FAKE_DURATION = 100          # seconds for the bar to reach ~95 %
+    FAKE_DURATION = 200          # seconds for the bar to reach ~95 %
     TICK = 0.25                  # update interval in seconds
     TICKS = int(FAKE_DURATION / TICK)
 

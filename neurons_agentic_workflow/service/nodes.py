@@ -67,7 +67,8 @@ async def editor_planner_node(state: GraphState) -> dict:
     """Produce a single comprehensive editing description from the recommendation."""
     messages = [
         SystemMessage(content=(
-            "You are a creative image editor planner. "
+            "You are a creative image editor planner. You received a creative image and you need to"
+            " edit it to satisfy a recommendation, while strictly respecting brand guidelines. "
             "Write a single, comprehensive editing description that captures all the changes "
             "needed to apply the recommendation to the image. "
             "Interpret the recommendations and the brand guidelines, to decompose the editing"
@@ -95,7 +96,8 @@ async def evaluation_planner_node(state: GraphState) -> dict:
     messages = [
         SystemMessage(content=(
             "You are a creative evaluation expert. "
-            "Given a recommendation and brand guidelines, define a set of evaluation metrics "
+            "Given a recommendation for editing a creative and brand guidelines that need to be preserved, "
+            "define a set of maximum 3 evaluation metrics "
             "that can be used to assess how well an edited image satisfies the recommendation. "
             "Each metric should have a clear name, a description of what to look for, "
             "and a weight (0.0–1.0) reflecting its relative importance. Weights should sum to 1.0.\n\n"
@@ -181,6 +183,10 @@ async def evaluator_node(state: GraphState) -> dict:
 async def _editor(state: EditorWorkerState) -> dict:
     """Apply the editing description to the image."""
     prompt_text = (
+        "You're a creative editor. You are part of a team that "
+        "opitmizes creatives for impact. This creative received some recommendations "
+        "that aim to improve its performance, a planner agent already interpreted those recommendations "
+        "into a detailed editing description, and now it's your job to apply that editing description to the creative. "
         "Edit this image following these instructions precisely:\n"
         f"{state.editing_instructions}"
     )
