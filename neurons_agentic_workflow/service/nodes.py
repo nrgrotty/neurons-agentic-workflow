@@ -55,11 +55,11 @@ def _validate_image_file(path: Path) -> str:
         )
     return mime_type
 
-_editor_planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(PlannerOutput)
-_evaluation_planner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluationMetrics)
-_critic_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(CriticOutput)
-_refiner_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(RefinerOutput)
-_evaluator_ranking_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").with_structured_output(EvaluatorRankings)
+_editor_planner_llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", thinking_level="medium").with_structured_output(PlannerOutput)
+_evaluation_planner_llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview").with_structured_output(EvaluationMetrics)
+_critic_llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview").with_structured_output(CriticOutput)
+_refiner_llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview").with_structured_output(RefinerOutput)
+_evaluator_ranking_llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview").with_structured_output(EvaluatorRankings)
 
 
 
@@ -70,6 +70,8 @@ async def editor_planner_node(state: GraphState) -> dict:
             "You are a creative image editor planner. "
             "Write a single, comprehensive editing description that captures all the changes "
             "needed to apply the recommendation to the image. "
+            "Interpret the recommendations and the brand guidelines, to decompose the editing"
+            " task into actionable subtasks. "
             "The description should be detailed and precise, covering every visual aspect that needs to change. "
             "Strictly respect the brand guidelines — do NOT change any protected region, "
             "typography, aspect ratio, or brand element.\n\n"
@@ -161,16 +163,7 @@ async def evaluator_node(state: GraphState) -> dict:
         ),
     })
     rankings: EvaluatorRankings = await _evaluator_ranking_llm.ainvoke([HumanMessage(content=content)])
-
-    # Organise per-variant score lists from the rankings.
-    variant_scores: dict[int, list[int]] = {i: [] for i in range(n)}
-    for vr in rankings.variant_rankings:
-        idx = max(0, min(vr.variant_index, n - 1))
-        for mr in vr.ranks:
-            variant_scores[idx].append(mr.rank)
-
-    # Step 2: sum each variant's scores directly.
-    totals: dict[int, int] = {i: sum(scores) for i, scores in variant_scores.items()}
+    totals: dict[int, int] = {variant.variant_index: sum([rank.rank for rank in variant.ranks]) for variant in rankings.variant_rankings}
 
     best_index = min(totals, key=totals.__getitem__)
     scores_summary = ", ".join(f"variant {i}: {s}" for i, s in sorted(totals.items()))
@@ -202,7 +195,7 @@ async def _editor(state: EditorWorkerState) -> dict:
         },
     )
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash-image",
+        model="gemini-3.1-flash-image-preview",
         contents=[
             types.Content(
                 parts=[
